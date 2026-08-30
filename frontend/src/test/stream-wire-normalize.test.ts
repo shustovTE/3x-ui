@@ -267,6 +267,96 @@ describe('normalizeXhttpForWire stream-one', () => {
   });
 });
 
+describe('normalizeXhttpForWire downloadSettings', () => {
+  it('keeps inbound downloadSettings when the toggle is on and drops the toggle key', () => {
+    const out = normalizeXhttpForWire(
+      {
+        path: '/app',
+        mode: 'auto',
+        enableDownloadSettings: true,
+        downloadSettings: {
+          address: 'cdn.example.com',
+          port: 443,
+          network: 'xhttp',
+          security: 'tls',
+          tlsSettings: { serverName: 'cdn.example.com', alpn: ['h2'], fingerprint: 'chrome' },
+          xhttpSettings: { path: '/app' },
+        },
+      },
+      'inbound',
+    );
+
+    expect(out).not.toHaveProperty('enableDownloadSettings');
+    expect(out.downloadSettings).toEqual({
+      address: 'cdn.example.com',
+      port: 443,
+      network: 'xhttp',
+      security: 'tls',
+      tlsSettings: { serverName: 'cdn.example.com', alpn: ['h2'], fingerprint: 'chrome' },
+      xhttpSettings: { path: '/app' },
+    });
+  });
+
+  it('drops inbound downloadSettings when the toggle is off', () => {
+    const out = normalizeXhttpForWire(
+      {
+        path: '/app',
+        mode: 'auto',
+        enableDownloadSettings: false,
+        downloadSettings: { address: 'cdn.example.com', port: 443, network: 'xhttp' },
+      },
+      'inbound',
+    );
+
+    expect(out).not.toHaveProperty('enableDownloadSettings');
+    expect(out).not.toHaveProperty('downloadSettings');
+  });
+
+  it('emits only the selected security branch of downloadSettings', () => {
+    const out = normalizeXhttpForWire(
+      {
+        path: '/app',
+        mode: 'auto',
+        enableDownloadSettings: true,
+        downloadSettings: {
+          address: 'cdn.example.com',
+          port: 8443,
+          network: 'tcp',
+          security: 'reality',
+          tlsSettings: { serverName: 'stale.example.com', alpn: [], fingerprint: 'chrome' },
+          realitySettings: {
+            serverName: 'cdn.example.com',
+            fingerprint: 'chrome',
+            publicKey: 'pk',
+            shortId: '',
+            spiderX: '/',
+          },
+          xhttpSettings: { path: '/app' },
+        },
+      },
+      'inbound',
+    );
+
+    const download = out.downloadSettings as Record<string, unknown>;
+    expect(download).not.toHaveProperty('tlsSettings');
+    // xray-core only accepts 'xhttp' here, so the normalizer pins it.
+    expect(download.network).toBe('xhttp');
+    expect(download.realitySettings).toEqual({
+      serverName: 'cdn.example.com',
+      fingerprint: 'chrome',
+      publicKey: 'pk',
+      spiderX: '/',
+    });
+  });
+
+  it('leaves an xhttp inbound without downloadSettings untouched', () => {
+    const out = normalizeXhttpForWire({ path: '/app', mode: 'auto' }, 'inbound');
+
+    expect(out).not.toHaveProperty('downloadSettings');
+    expect(out).not.toHaveProperty('enableDownloadSettings');
+  });
+});
+
 describe('normalizeSockoptForWire', () => {
   it('omits doc-example defaults that throttle throughput', () => {
     const out = normalizeSockoptForWire({

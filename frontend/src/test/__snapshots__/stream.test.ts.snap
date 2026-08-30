@@ -39,6 +39,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-basic byte-stably 1`] = `
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -75,6 +76,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-padding byte-stably
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -111,6 +113,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-placement byte-stab
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {},
     "host": "edge.example.test",
@@ -147,6 +150,7 @@ exports[`NetworkSettingsSchema fixtures > parses xhttp-extra-tuning byte-stably 
 {
   "network": "xhttp",
   "xhttpSettings": {
+    "enableDownloadSettings": false,
     "enableXmux": false,
     "headers": {
       "X-Forwarded-For": "10.0.0.1",

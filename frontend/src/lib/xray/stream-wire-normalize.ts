@@ -178,6 +178,27 @@ function dropEmptyStrings(obj: Record<string, unknown>, keys: readonly string[])
   }
 }
 
+// downloadSettings rides into the share link verbatim, so emit only the
+// security branch the operator picked — a stale sibling would confuse clients.
+function normalizeDownloadSettingsForWire(raw: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...raw };
+  out.network = 'xhttp';
+  if (out.security !== 'tls') delete out.tlsSettings;
+  if (out.security !== 'reality') delete out.realitySettings;
+  if (isRecord(out.tlsSettings)) {
+    const tls = { ...out.tlsSettings };
+    dropEmptyStrings(tls, ['serverName', 'fingerprint']);
+    if (Array.isArray(tls.alpn) && tls.alpn.length === 0) delete tls.alpn;
+    out.tlsSettings = tls;
+  }
+  if (isRecord(out.realitySettings)) {
+    const reality = { ...out.realitySettings };
+    dropEmptyStrings(reality, ['serverName', 'fingerprint', 'publicKey', 'shortId', 'spiderX']);
+    out.realitySettings = reality;
+  }
+  return out;
+}
+
 function dropFalseFlags(obj: Record<string, unknown>, keys: readonly string[]): void {
   for (const key of keys) {
     if (obj[key] === false) delete obj[key];
@@ -227,9 +248,12 @@ export function normalizeXhttpForWire(
   const mode = typeof out.mode === 'string' && out.mode !== '' ? out.mode : 'auto';
   const enableXmux = out.enableXmux === true;
   delete out.enableXmux;
+  const enableDownloadSettings = out.enableDownloadSettings === true;
+  delete out.enableDownloadSettings;
 
   if (side === 'inbound') {
     if (!enableXmux) delete out.xmux;
+    if (!enableDownloadSettings) delete out.downloadSettings;
     // scMinPostsIntervalMs is a client-only tuning knob that subscriptions
     // must propagate to clients. Only strip the xray-core default ("30")
     // or empty values — the literal "30" is a known DPI fingerprint (#5141).
@@ -241,6 +265,9 @@ export function normalizeXhttpForWire(
 
   if (isRecord(out.xmux)) {
     out.xmux = resolveXmuxExclusivity(out.xmux);
+  }
+  if (isRecord(out.downloadSettings)) {
+    out.downloadSettings = normalizeDownloadSettingsForWire(out.downloadSettings);
   }
 
   dropEmptyStrings(out, PLACEMENT_STRING_FIELDS);

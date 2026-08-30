@@ -186,6 +186,10 @@ export function rawInboundToFormValues(row: RawInboundRow): InboundFormValues {
         xhttp.enableXmux = true;
         xhttp.xmux = { ...XMUX_DEFAULTS, ...(xmux as Record<string, unknown>) };
       }
+      const download = xhttp.downloadSettings;
+      if (download && typeof download === 'object' && !Array.isArray(download)) {
+        xhttp.enableDownloadSettings = true;
+      }
     }
     const so = streamRecord.sockopt;
     if (so && typeof so === 'object' && !Array.isArray(so)) {

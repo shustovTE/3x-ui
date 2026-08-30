@@ -1,10 +1,17 @@
 import { useTranslation } from 'react-i18next';
-import { AutoComplete, Input, InputNumber, Select, Switch } from 'antd';
+import { AutoComplete, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { HeaderMapEditor } from '@/components/form';
-import { FormField } from '@/components/form/rhf';
-import { XHTTP_SESSION_ID_TABLES, XMUX_FRESH_DEFAULTS } from '@/schemas/protocols/stream/xhttp';
+import { FormField, rhfZodValidate } from '@/components/form/rhf';
+import { ALPN_OPTION, UTLS_FINGERPRINT } from '@/schemas/primitives';
+import {
+  DOWNLOAD_SETTINGS_FRESH_DEFAULTS,
+  XHTTP_SESSION_ID_TABLES,
+  XHttpDownloadAddressSchema,
+  XHttpDownloadPortSchema,
+  XMUX_FRESH_DEFAULTS,
+} from '@/schemas/protocols/stream/xhttp';
 import { validateSessionIDLength, validateSessionIDTable } from '@/lib/xray/xhttp-session-id';
 import { int32RangeUpper } from '@/lib/xray/stream-wire-normalize';
 
@@ -46,6 +53,36 @@ export default function XhttpForm() {
     name: 'streamSettings.xhttpSettings.uplinkDataPlacement',
   }) as string | undefined;
   const enableXmux = !!useWatch({ control, name: 'streamSettings.xhttpSettings.enableXmux' });
+  const enableDownloadSettings = !!useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.enableDownloadSettings',
+  });
+  const downloadSecurity = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.downloadSettings.security',
+  }) as string | undefined;
+  const uplinkPath = useWatch({ control, name: 'streamSettings.xhttpSettings.path' }) as
+    | string
+    | undefined;
+  const downloadPath = useWatch({
+    control,
+    name: 'streamSettings.xhttpSettings.downloadSettings.xhttpSettings.path',
+  }) as string | undefined;
+  // Deliberate splits exist (a CDN rewriting the path), so mismatch is a
+  // warning under the field rather than a rule that blocks the save.
+  const downloadPathMismatch =
+    enableDownloadSettings && (downloadPath ?? '') !== (uplinkPath ?? '');
+
+  function onDownloadSettingsToggle(checked: boolean) {
+    if (!checked) return;
+    const existing = getValues('streamSettings.xhttpSettings.downloadSettings');
+    const hasValues = existing && typeof existing === 'object' && Object.keys(existing).length > 0;
+    if (hasValues) return;
+    setValue('streamSettings.xhttpSettings.downloadSettings', {
+      ...DOWNLOAD_SETTINGS_FRESH_DEFAULTS,
+      xhttpSettings: { path: getValues('streamSettings.xhttpSettings.path') || '/' },
+    });
+  }
 
   function onXmuxToggle(checked: boolean) {
     if (!checked) return;
@@ -362,6 +399,187 @@ export default function XhttpForm() {
             name={['streamSettings', 'xhttpSettings', 'xmux', 'hKeepAlivePeriod']}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
+          </FormField>
+        </>
+      )}
+      {/* downloadSettings routes the download direction over a separate
+          dialer; xray-core pairs it with the uplink by their shared path. */}
+      <FormField
+        label="downloadSettings"
+        tooltip={t('pages.inbounds.form.downloadSettingsHint')}
+        name={['streamSettings', 'xhttpSettings', 'enableDownloadSettings']}
+        valueProp="checked"
+        onAfterChange={(v) => onDownloadSettingsToggle(v as boolean)}
+      >
+        <Switch />
+      </FormField>
+      {enableDownloadSettings && (
+        <>
+          <FormField
+            label={t('pages.inbounds.address')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'address']}
+            rules={{ validate: rhfZodValidate(XHttpDownloadAddressSchema) }}
+            required
+          >
+            <Input placeholder="cdn.example.com" />
+          </FormField>
+          <FormField
+            label={t('pages.inbounds.port')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'port']}
+            rules={{ validate: rhfZodValidate(XHttpDownloadPortSchema) }}
+            required
+          >
+            <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+          </FormField>
+          <FormField
+            label={t('pages.inbounds.network')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'network']}
+          >
+            <Select disabled options={[{ value: 'xhttp', label: 'xhttp' }]} />
+          </FormField>
+          <FormField
+            label={t('security')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'security']}
+          >
+            <Select
+              options={[
+                { value: 'none', label: 'none' },
+                { value: 'tls', label: 'tls' },
+                { value: 'reality', label: 'reality' },
+              ]}
+            />
+          </FormField>
+          {downloadSecurity === 'tls' && (
+            <>
+              <FormField
+                label="SNI"
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'tlsSettings',
+                  'serverName',
+                ]}
+              >
+                <Input placeholder={t('pages.inbounds.form.serverNameIndication')} />
+              </FormField>
+              <FormField
+                label="ALPN"
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'tlsSettings',
+                  'alpn',
+                ]}
+              >
+                <Select
+                  mode="multiple"
+                  tokenSeparators={[',']}
+                  style={{ width: '100%' }}
+                  options={Object.values(ALPN_OPTION).map((a) => ({ value: a, label: a }))}
+                />
+              </FormField>
+              <FormField
+                label="uTLS"
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'tlsSettings',
+                  'fingerprint',
+                ]}
+              >
+                <Select
+                  options={[
+                    { value: '', label: 'None' },
+                    ...Object.values(UTLS_FINGERPRINT).map((fp) => ({ value: fp, label: fp })),
+                  ]}
+                />
+              </FormField>
+            </>
+          )}
+          {downloadSecurity === 'reality' && (
+            <>
+              <FormField
+                label="SNI"
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'realitySettings',
+                  'serverName',
+                ]}
+              >
+                <Input placeholder={t('pages.inbounds.form.serverNameIndication')} />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.publicKey')}
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'realitySettings',
+                  'publicKey',
+                ]}
+              >
+                <Input />
+              </FormField>
+              <FormField
+                label={t('pages.xray.outboundForm.shortId')}
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'realitySettings',
+                  'shortId',
+                ]}
+              >
+                <Input />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.spiderX')}
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'realitySettings',
+                  'spiderX',
+                ]}
+              >
+                <Input placeholder="/" />
+              </FormField>
+              <FormField
+                label={t('pages.inbounds.form.fingerprint')}
+                name={[
+                  'streamSettings',
+                  'xhttpSettings',
+                  'downloadSettings',
+                  'realitySettings',
+                  'fingerprint',
+                ]}
+              >
+                <Select
+                  options={Object.values(UTLS_FINGERPRINT).map((fp) => ({
+                    value: fp,
+                    label: fp,
+                  }))}
+                />
+              </FormField>
+            </>
+          )}
+          <FormField
+            label={t('path')}
+            name={['streamSettings', 'xhttpSettings', 'downloadSettings', 'xhttpSettings', 'path']}
+            extra={
+              downloadPathMismatch ? (
+                <Typography.Text type="warning">
+                  {t('pages.inbounds.form.downloadSettingsPathMismatch')}
+                </Typography.Text>
+              ) : undefined
+            }
+          >
+            <Input placeholder={uplinkPath || '/'} />
           </FormField>
         </>
       )}

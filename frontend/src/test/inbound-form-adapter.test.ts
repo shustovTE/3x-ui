@@ -446,3 +446,55 @@ describe('xhttp xmux maxConcurrency survives a load/re-save round-trip', () => {
     expect(xmux.maxConcurrency).toBe('1-2');
   });
 });
+
+// downloadSettings is client-only: the panel stores it so subscriptions can
+// hand it to clients, and the Go side strips it out of the xray config.
+describe('xhttp downloadSettings survives a load/re-save round-trip', () => {
+  const downloadSettings = {
+    address: 'cdn.example.com',
+    port: 443,
+    network: 'xhttp',
+    security: 'tls',
+    tlsSettings: { serverName: 'cdn.example.com', alpn: ['h2'], fingerprint: 'chrome' },
+    xhttpSettings: { path: '/xh' },
+  };
+  const downloadRow: RawInboundRow = {
+    ...vlessRow,
+    streamSettings: {
+      network: 'xhttp',
+      security: 'none',
+      xhttpSettings: { path: '/xh', mode: 'auto', downloadSettings },
+    },
+  };
+
+  it('rawInboundToFormValues expands the stored block into the UI toggle', () => {
+    const values = rawInboundToFormValues(downloadRow);
+    const xhttp = (values.streamSettings as unknown as Record<string, Record<string, unknown>>)
+      .xhttpSettings;
+    expect(xhttp.enableDownloadSettings).toBe(true);
+    expect(xhttp.downloadSettings).toEqual(downloadSettings);
+  });
+
+  it('formValuesToWirePayload keeps the block on an unedited re-save', () => {
+    const values = rawInboundToFormValues(downloadRow);
+    const payload = formValuesToWirePayload(values);
+    const stream = JSON.parse(payload.streamSettings) as Record<string, Record<string, unknown>>;
+    expect(stream.xhttpSettings.downloadSettings).toEqual(downloadSettings);
+    expect(stream.xhttpSettings).not.toHaveProperty('enableDownloadSettings');
+  });
+
+  it('an inbound without downloadSettings never grows the key', () => {
+    const plainRow: RawInboundRow = {
+      ...vlessRow,
+      streamSettings: {
+        network: 'xhttp',
+        security: 'none',
+        xhttpSettings: { path: '/xh', mode: 'auto' },
+      },
+    };
+    const payload = formValuesToWirePayload(rawInboundToFormValues(plainRow));
+    const stream = JSON.parse(payload.streamSettings) as Record<string, Record<string, unknown>>;
+    expect(stream.xhttpSettings).not.toHaveProperty('downloadSettings');
+    expect(stream.xhttpSettings).not.toHaveProperty('enableDownloadSettings');
+  });
+});
